@@ -1,9 +1,15 @@
+﻿import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
-DATABASE_URL = "sqlite:///./cs2_investment.db"
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./cs2_investment.db")
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# Railway injects postgres:// but SQLAlchemy needs postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -12,7 +18,7 @@ class Base(DeclarativeBase):
 
 
 def init_db():
-    from db.models import PriceSnapshot, WatchedSkin  # noqa: F401
+    from db.models import PriceSnapshot, WatchedSkin, CachedInventory  # noqa: F401
     Base.metadata.create_all(bind=engine)
 
 
