@@ -43,7 +43,7 @@ export default function Dashboard() {
   const [data, setData] = useState(null)
 
   useEffect(() => {
-    if (!steamId) { setData(null); return }
+    if (!steamId) { setData(null); setError(null); return }
     if (!data) load(steamId)
   }, [steamId])
 
@@ -89,8 +89,17 @@ export default function Dashboard() {
         </div>
       )}
 
-      {error && <div className="error-msg">{error}</div>}
       {loading && <div className="loading">Fetching portfolio…</div>}
+
+      {error && (
+        <div className="dash-error card">
+          <div className="dash-error-title">Could not load portfolio</div>
+          <div className="dash-error-msg">{error}</div>
+          <button className="btn-secondary" onClick={() => load(steamId)} style={{ marginTop: 12 }}>
+            Try again
+          </button>
+        </div>
+      )}
 
       {data && (
         <>

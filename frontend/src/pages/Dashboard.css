@@ -130,3 +130,23 @@
   transition: opacity 0.15s;
 }
 .dash-steam-btn:hover { opacity: 0.85; }
+
+.dash-error {
+  max-width: 480px;
+  margin-top: 24px;
+  border-color: rgba(255, 77, 106, 0.3);
+  background: rgba(255, 77, 106, 0.06);
+}
+
+.dash-error-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--red);
+  margin-bottom: 6px;
+}
+
+.dash-error-msg {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
