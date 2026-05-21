@@ -6,14 +6,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-CSFLOAT_BASE = "https://csfloat.com/api/v1"
+CSFLOAT_BASE     = "https://csfloat.com/api/v1"
 STEAM_MARKET_BASE = "https://steamcommunity.com/market/priceoverview"
 _API_KEY = os.getenv("CSFLOAT_API_KEY", "")
 
 _STEAM_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "application/json",
-    "Referer": "https://steamcommunity.com/market/",
+    "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept":          "application/json",
+    "Referer":         "https://steamcommunity.com/market/",
 }
 
 
@@ -64,13 +64,12 @@ async def _get_steam_market_price(market_hash_name: str) -> Optional[float]:
                     return round(float(cleaned), 2)
                 except ValueError:
                     continue
-        return None
     except Exception:
-        return None
+        pass
+    return None
 
 
 async def get_item_prices_dual(market_hash_name: str) -> dict:
-    """Fetch CSFloat and Steam Market prices concurrently. Returns {csfloat_price, steam_price}."""
     csfloat_price, steam_price = await asyncio.gather(
         _get_csfloat_price(market_hash_name),
         _get_steam_market_price(market_hash_name),
@@ -79,25 +78,32 @@ async def get_item_prices_dual(market_hash_name: str) -> dict:
 
 
 async def get_item_price(market_hash_name: str) -> Optional[float]:
-    """Best available price: CSFloat first, Steam Market fallback."""
     prices = await get_item_prices_dual(market_hash_name)
     return prices["csfloat_price"] or prices["steam_price"]
 
 
 async def get_price_history(market_hash_name: str) -> list[dict]:
+    """
+    Returns recent price data points from CSFloat active listings.
+    Uses listing created_at dates as timestamps — gives days/weeks of spread.
+    Falls back to empty list on any error (including rate limits).
+    """
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
             resp = await client.get(
                 f"{CSFLOAT_BASE}/listings",
-                params={"market_hash_name": market_hash_name, "limit": 50, "sort_by": "most_recent", "type": "sold"},
+                params={"market_hash_name": market_hash_name, "limit": 50, "sort_by": "most_recent"},
                 headers=_cf_headers(),
             )
             resp.raise_for_status()
             data = resp.json()
         return [
-            {"price": l["price"] / 100, "date": l.get("sold_at", l.get("created_at", ""))}
+            {
+                "price": l["price"] / 100,
+                "date":  l.get("created_at", ""),
+            }
             for l in data.get("data", [])
-            if "price" in l
+            if "price" in l and l.get("created_at")
         ]
     except Exception:
         return []
