@@ -147,7 +147,7 @@ export default function Recommendations() {
 
       <div className="rec-tabs">
         <button className={`rec-tab${tab === 'weekly' ? ' active' : ''}`} onClick={() => setTab('weekly')}>Weekly Picks</button>
-        <button className={`rec-tab${tab === 'ml' ? ' active' : ''}`} onClick={() => setTab('ml')}>ML Analysis</button>
+        <button className={`rec-tab${tab === 'ml' ? ' active' : ''}`} onClick={() => setTab('ml')}>Market Algorithm</button>
       </div>
 
       {tab === 'weekly' && (
@@ -235,5 +235,7 @@ export default function Recommendations() {
     </div>
   )
 }
+
+
 
 
