@@ -180,6 +180,7 @@ export default function Recommendations() {
       {seedResult && (
         <div className="seed-result card">
           Added <strong>{seedResult.added_to_watchlist}</strong> new skins ({seedResult.total_seeded} total tracked).
+          {seedResult.prices_queued > 0 && <span style={{ color: 'var(--text-dim)', marginLeft: 8 }}>Fetching prices for {seedResult.prices_queued} skins in the background…</span>}
         </div>
       )}
       {backfillResult && (
@@ -290,5 +291,6 @@ export default function Recommendations() {
     </div>
   )
 }
+
 
 

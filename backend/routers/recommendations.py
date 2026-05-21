@@ -1,14 +1,15 @@
 ﻿import asyncio
 import os
+import re
 import json
 import random
 from collections import defaultdict
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import select, distinct
 from datetime import datetime, timedelta
 
-from db.database import get_db
+from db.database import get_db, SessionLocal
 from db.models import WatchedSkin, PriceSnapshot
 from services.trend_analyzer import get_trending_skins, get_ml_trending_skins
 from services.csfloat_api import get_item_price, get_price_history
@@ -18,39 +19,132 @@ router = APIRouter()
 
 _DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "popular_skins.json")
 _BACKFILL_SEMAPHORE = asyncio.Semaphore(3)
+_SEED_SEMAPHORE    = asyncio.Semaphore(5)
 
 
+# ---------------------------------------------------------------------------
+# Price filter — mirrors frontend categorize() logic
+# ---------------------------------------------------------------------------
+def _is_price_exempt(name: str) -> bool:
+    """Cases, capsules and stickers are shown regardless of price."""
+    if re.search(r"\bCase$", name):    return True
+    if "Capsule" in name:              return True
+    if name.startswith("Sticker |"):   return True
+    return False
+
+
+def _price_filter(items: list[dict]) -> list[dict]:
+    return [
+        item for item in items
+        if (item.get("current_price") or 0) >= 1 or _is_price_exempt(item["market_hash_name"])
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Recommendation endpoints
+# ---------------------------------------------------------------------------
 @router.get("/")
 def get_recommendations(limit: int = 10, db: Session = Depends(get_db)):
     trending = get_trending_skins(db)
-    return {"recommendations": trending[:limit], "generated_at": datetime.utcnow().isoformat()}
+    return {
+        "recommendations": _price_filter(trending)[:limit],
+        "generated_at": datetime.utcnow().isoformat(),
+    }
 
 
 @router.get("/ml-trends")
 def get_ml_trends(limit: int = 30, db: Session = Depends(get_db)):
     results = get_ml_trending_skins(db)
-    return {"trends": results[:limit], "total_analyzed": len(results), "generated_at": datetime.utcnow().isoformat()}
+    filtered = _price_filter(results)
+    return {
+        "trends": filtered[:limit],
+        "total_analyzed": len(filtered),
+        "generated_at": datetime.utcnow().isoformat(),
+    }
 
 
+# ---------------------------------------------------------------------------
+# Background price fetcher used by seed
+# ---------------------------------------------------------------------------
+async def _seed_fetch_prices(names: list[str], today: str) -> None:
+    """Fetch today's price for each name concurrently; runs as a background task."""
+    async def _fetch_one(name: str):
+        async with _SEED_SEMAPHORE:
+            await asyncio.sleep(0.3)
+            return name, await get_item_price(name)
+
+    results = await asyncio.gather(*[_fetch_one(n) for n in names], return_exceptions=True)
+
+    db = SessionLocal()
+    try:
+        for item in results:
+            if isinstance(item, Exception):
+                continue
+            name, price = item
+            if not price:
+                continue
+            exists = db.execute(
+                select(PriceSnapshot)
+                .where(PriceSnapshot.market_hash_name == name)
+                .where(PriceSnapshot.date == today)
+            ).scalar_one_or_none()
+            if not exists:
+                db.add(PriceSnapshot(market_hash_name=name, price=price, date=today))
+        db.commit()
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Seed watchlist
+# ---------------------------------------------------------------------------
 @router.post("/seed-watchlist")
-async def seed_popular_skins(request: Request, db: Session = Depends(get_db)):
+async def seed_popular_skins(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     rate_limit(request, max_calls=5, window=3600)
+
     with open(_DATA_PATH) as f:
         popular: list[str] = json.load(f)
+
     today = datetime.utcnow().strftime("%Y-%m-%d")
+
+    # 1. Add new skins to watchlist (fast — DB only)
     added = 0
     for name in popular:
-        if not db.execute(select(WatchedSkin).where(WatchedSkin.market_hash_name == name)).scalar_one_or_none():
+        if not db.execute(
+            select(WatchedSkin).where(WatchedSkin.market_hash_name == name)
+        ).scalar_one_or_none():
             db.add(WatchedSkin(market_hash_name=name, source="watchlist"))
             added += 1
-        if not db.execute(select(PriceSnapshot).where(PriceSnapshot.market_hash_name == name).where(PriceSnapshot.date == today)).scalar_one_or_none():
-            price = await get_item_price(name)
-            if price:
-                db.add(PriceSnapshot(market_hash_name=name, price=price, date=today))
     db.commit()
-    return {"added_to_watchlist": added, "total_seeded": len(popular)}
+
+    # 2. Find which skins still need a price snapshot for today
+    existing_today = {
+        r for r in db.execute(
+            select(PriceSnapshot.market_hash_name)
+            .where(PriceSnapshot.market_hash_name.in_(popular))
+            .where(PriceSnapshot.date == today)
+        ).scalars().all()
+    }
+    missing = [n for n in popular if n not in existing_today]
+
+    # 3. Fetch prices in the background — response returns immediately
+    if missing:
+        background_tasks.add_task(_seed_fetch_prices, missing, today)
+
+    return {
+        "added_to_watchlist": added,
+        "total_seeded": len(popular),
+        "prices_queued": len(missing),
+    }
 
 
+# ---------------------------------------------------------------------------
+# Backfill history
+# ---------------------------------------------------------------------------
 @router.post("/backfill")
 async def backfill_history(request: Request, db: Session = Depends(get_db)):
     rate_limit(request, max_calls=2, window=3600)
