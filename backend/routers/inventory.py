@@ -14,7 +14,7 @@ from db.models import PriceSnapshot, WatchedSkin, CachedInventory
 
 router = APIRouter()
 
-CACHE_TTL_HOURS = 1
+CACHE_TTL_HOURS = 6
 _PRICE_SEMAPHORE = asyncio.Semaphore(5)
 
 STEAM_ID_RE = __import__("re").compile(r"^\d{17}$")
@@ -22,7 +22,7 @@ STEAM_ID_RE = __import__("re").compile(r"^\d{17}$")
 
 async def _fetch_dual_price(name: str) -> tuple[str, dict]:
     async with _PRICE_SEMAPHORE:
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.5)
         prices = await get_item_prices_dual(name)
         return name, prices
 
@@ -130,3 +130,4 @@ async def fetch_inventory(
         "count":       len(enriched),
         "from_cache":  use_cache,
     }
+

@@ -2,6 +2,41 @@
 import { api } from '../api/client'
 import './Recommendations.css'
 
+// --- Category helpers ---
+const RIFLES  = ['AK-47','AWP','M4A4','M4A1-S','SSG 08','SG 553','AUG','FAMAS','Galil AR','G3SG1','SCAR-20']
+const PISTOLS = ['Desert Eagle','Glock-18','USP-S','P250','Five-SeveN','Tec-9','CZ75-Auto','P2000','Dual Berettas','R8 Revolver']
+const SMGS    = ['MP9','MAC-10','MP5-SD','PP-Bizon','UMP-45','MP7']
+const HEAVY   = ['Nova','XM1014','MAG-7','Sawed-Off','M249','Negev']
+const GLOVES  = ['Sport Gloves','Specialist Gloves','Moto Gloves','Bloodhound Gloves','Hand Wraps','Hydra Gloves','Driver Gloves','Broken Fang Gloves']
+
+function categorize(name) {
+  if (/\bCase$/.test(name))       return 'Cases'
+  if (name.includes('Capsule'))   return 'Capsules'
+  if (name.startsWith('Sticker |')) return 'Stickers'
+  if (name.startsWith('★')) {
+    if (GLOVES.some(g => name.includes(g))) return 'Gloves'
+    return 'Knives'
+  }
+  if (RIFLES.some(r  => name.startsWith(r  + ' |'))) return 'Rifles'
+  if (PISTOLS.some(p => name.startsWith(p  + ' |'))) return 'Pistols'
+  if (SMGS.some(s    => name.startsWith(s  + ' |'))) return 'SMGs'
+  if (HEAVY.some(h   => name.startsWith(h  + ' |'))) return 'Heavy'
+  return 'Other'
+}
+
+const CATEGORY_ORDER = ['Rifles','Pistols','SMGs','Heavy','Knives','Gloves','Cases','Capsules','Stickers','Other']
+
+function groupByCategory(items) {
+  const groups = {}
+  for (const item of items) {
+    const cat = categorize(item.market_hash_name)
+    if (!groups[cat]) groups[cat] = []
+    groups[cat].push(item)
+  }
+  return CATEGORY_ORDER.filter(c => groups[c]).map(c => ({ category: c, items: groups[c] }))
+}
+
+// --- Row components ---
 function cfloatUrl(name) {
   return `https://csfloat.com/search?market_hash_name=${encodeURIComponent(name)}&sort_by=lowest_price`
 }
@@ -58,6 +93,7 @@ function MlRow({ item, rank }) {
   )
 }
 
+// --- Page ---
 export default function Recommendations() {
   const [tab, setTab] = useState('weekly')
   const [loading, setLoading] = useState(false)
@@ -78,14 +114,14 @@ export default function Recommendations() {
 
   async function loadWeekly() {
     setLoading(true); setError(null)
-    try { setData(await api.getRecommendations(15)) }
+    try { setData(await api.getRecommendations(100)) }
     catch (err) { setError(err.message) }
     finally { setLoading(false) }
   }
 
   async function loadMl() {
     setMlLoading(true); setError(null)
-    try { setMlData(await api.getMlTrends(30)) }
+    try { setMlData(await api.getMlTrends(100)) }
     catch (err) { setError(err.message) }
     finally { setMlLoading(false) }
   }
@@ -167,15 +203,20 @@ export default function Recommendations() {
                   </div>
                 </div>
               ) : (
-                <div className="rec-table card">
-                  <div className="rec-table-header">
-                    <span>#</span><span>Skin</span><span>Price</span>
-                    <span>7d Change</span><span>Slope</span><span>Data</span><span></span>
+                groupByCategory(data.recommendations).map(({ category, items }) => (
+                  <div key={category} className="rec-category-section">
+                    <div className="rec-category-header">{category}</div>
+                    <div className="rec-table card">
+                      <div className="rec-table-header">
+                        <span>#</span><span>Skin</span><span>Price</span>
+                        <span>7d Change</span><span>Slope</span><span>Data</span><span></span>
+                      </div>
+                      {items.map((item, i) => (
+                        <RecommendationRow key={item.market_hash_name} item={item} rank={i + 1} />
+                      ))}
+                    </div>
                   </div>
-                  {data.recommendations.map((item, i) => (
-                    <RecommendationRow key={item.market_hash_name} item={item} rank={i + 1} />
-                  ))}
-                </div>
+                ))
               )}
             </>
           )}
@@ -212,16 +253,21 @@ export default function Recommendations() {
                   </div>
                 </div>
               ) : (
-                <div className="rec-table card">
-                  <div className="ml-table-header">
-                    <span>#</span><span>Skin</span><span>Price</span>
-                    <span>Change</span><span>Score</span><span>Confidence</span>
-                    <span>Days</span><span>Signal</span><span></span>
+                groupByCategory(mlData.trends).map(({ category, items }) => (
+                  <div key={category} className="rec-category-section">
+                    <div className="rec-category-header">{category}</div>
+                    <div className="rec-table card">
+                      <div className="ml-table-header">
+                        <span>#</span><span>Skin</span><span>Price</span>
+                        <span>Change</span><span>Score</span><span>Confidence</span>
+                        <span>Days</span><span>Signal</span><span></span>
+                      </div>
+                      {items.map((item, i) => (
+                        <MlRow key={item.market_hash_name} item={item} rank={i + 1} />
+                      ))}
+                    </div>
                   </div>
-                  {mlData.trends.map((item, i) => (
-                    <MlRow key={item.market_hash_name} item={item} rank={i + 1} />
-                  ))}
-                </div>
+                ))
               )}
             </>
           )}
@@ -235,7 +281,3 @@ export default function Recommendations() {
     </div>
   )
 }
-
-
-
-
