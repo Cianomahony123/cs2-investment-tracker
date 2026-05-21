@@ -2,6 +2,10 @@
 import { api } from '../api/client'
 import './Recommendations.css'
 
+function cfloatUrl(name) {
+  return `https://csfloat.com/buy?market_hash_name=${encodeURIComponent(name)}&sort_by=lowest_price`
+}
+
 function RecommendationRow({ item, rank }) {
   const pct = item.total_change_pct
   const cls = pct > 0 ? 'tag-up' : pct < 0 ? 'tag-down' : 'tag-flat'
@@ -17,6 +21,9 @@ function RecommendationRow({ item, rank }) {
       <div className={`rec-pct ${cls}`}>{sign}{pct.toFixed(1)}%</div>
       <div className="rec-slope">{item.slope_pct > 0 ? '+' : ''}{item.slope_pct.toFixed(2)}%/day</div>
       <div className="rec-points">{item.data_points}d data</div>
+      <a href={cfloatUrl(item.market_hash_name)} target="_blank" rel="noopener noreferrer" className="buy-btn">
+        Buy
+      </a>
     </div>
   )
 }
@@ -44,6 +51,9 @@ function MlRow({ item, rank }) {
       <div className="ml-conf">{(item.r_squared * 100).toFixed(0)}%</div>
       <div className="ml-days">{item.data_points}d</div>
       <div><span className={cls}>{item.classification}</span></div>
+      <a href={cfloatUrl(item.market_hash_name)} target="_blank" rel="noopener noreferrer" className="buy-btn">
+        Buy
+      </a>
     </div>
   )
 }
@@ -160,7 +170,7 @@ export default function Recommendations() {
                 <div className="rec-table card">
                   <div className="rec-table-header">
                     <span>#</span><span>Skin</span><span>Price</span>
-                    <span>7d Change</span><span>Slope</span><span>Data</span>
+                    <span>7d Change</span><span>Slope</span><span>Data</span><span></span>
                   </div>
                   {data.recommendations.map((item, i) => (
                     <RecommendationRow key={item.market_hash_name} item={item} rank={i + 1} />
@@ -206,7 +216,7 @@ export default function Recommendations() {
                   <div className="ml-table-header">
                     <span>#</span><span>Skin</span><span>Price</span>
                     <span>Change</span><span>Score</span><span>Confidence</span>
-                    <span>Days</span><span>Signal</span>
+                    <span>Days</span><span>Signal</span><span></span>
                   </div>
                   {mlData.trends.map((item, i) => (
                     <MlRow key={item.market_hash_name} item={item} rank={i + 1} />
@@ -225,3 +235,4 @@ export default function Recommendations() {
     </div>
   )
 }
+
