@@ -10,21 +10,12 @@ async function request(path, options = {}) {
 }
 
 export const api = {
-  getInventory: (steamId, forceRefresh = false) =>
+  getInventory:    (steamId, forceRefresh = false) =>
     request(`/inventory/${steamId}${forceRefresh ? '?refresh=true' : ''}`),
-
-  getPriceHistory: (name) =>
-    request(`/prices/${encodeURIComponent(name)}/history`),
-
-  forceSnapshot: (name) =>
-    request(`/prices/${encodeURIComponent(name)}/snapshot`, { method: 'POST' }),
-
-  getRecommendations: (limit = 10) =>
-    request(`/recommendations/?limit=${limit}`),
-
-  getMlTrends: (limit = 30) =>
-    request(`/recommendations/ml-trends?limit=${limit}`),
-
-  seedWatchlist: () =>
-    request('/recommendations/seed-watchlist', { method: 'POST' }),
+  getPriceHistory: (name)  => request(`/prices/${encodeURIComponent(name)}/history`),
+  forceSnapshot:   (name)  => request(`/prices/${encodeURIComponent(name)}/snapshot`, { method: 'POST' }),
+  getRecommendations: (limit = 10)  => request(`/recommendations/?limit=${limit}`),
+  getMlTrends:        (limit = 30)  => request(`/recommendations/ml-trends?limit=${limit}`),
+  seedWatchlist:   () => request('/recommendations/seed-watchlist', { method: 'POST' }),
+  backfillHistory: () => request('/recommendations/backfill',       { method: 'POST' }),
 }

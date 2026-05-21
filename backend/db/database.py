@@ -18,7 +18,7 @@ class Base(DeclarativeBase):
 
 
 def init_db():
-    from db.models import PriceSnapshot, WatchedSkin, CachedInventory  # noqa: F401
+    from db.models import PriceSnapshot, WatchedSkin, CachedInventory, GoogleUser  # noqa: F401  # noqa: F401
     Base.metadata.create_all(bind=engine)
 
 
@@ -28,3 +28,4 @@ def get_db():
         yield db
     finally:
         db.close()
+

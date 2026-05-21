@@ -1,5 +1,6 @@
 ﻿import asyncio
 import json
+from collections import defaultdict
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -16,6 +17,8 @@ router = APIRouter()
 CACHE_TTL_HOURS = 1
 _PRICE_SEMAPHORE = asyncio.Semaphore(5)
 
+STEAM_ID_RE = __import__("re").compile(r"^\d{17}$")
+
 
 async def _fetch_dual_price(name: str) -> tuple[str, dict]:
     async with _PRICE_SEMAPHORE:
@@ -27,17 +30,16 @@ async def _fetch_dual_price(name: str) -> tuple[str, dict]:
 @router.get("/{steam_id}")
 async def fetch_inventory(
     steam_id: str,
-    refresh: bool = Query(False, description="Force re-fetch from Steam, ignoring cache"),
+    refresh: bool = Query(False),
     db: Session = Depends(get_db),
 ):
-    # --- Steam inventory (cached) ---
-    cached = db.execute(
-        select(CachedInventory).where(CachedInventory.steam_id == steam_id)
-    ).scalar_one_or_none()
+    if not STEAM_ID_RE.match(steam_id):
+        raise HTTPException(status_code=400, detail="Invalid Steam ID — must be a 17-digit number.")
 
+    # --- Steam inventory (cached) ---
+    cached = db.execute(select(CachedInventory).where(CachedInventory.steam_id == steam_id)).scalar_one_or_none()
     use_cache = (
-        cached is not None
-        and not refresh
+        cached is not None and not refresh
         and (datetime.utcnow() - cached.cached_at).total_seconds() < CACHE_TTL_HOURS * 3600
     )
 
@@ -49,21 +51,17 @@ async def fetch_inventory(
         except (ValueError, IOError) as e:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception:
-            raise HTTPException(
-                status_code=502,
-                detail="Could not reach Steam. Make sure your Steam ID is correct and your inventory is set to Public.",
-            )
-
+            raise HTTPException(status_code=502, detail="Could not reach Steam. Make sure your inventory is set to Public.")
         if cached:
             cached.items_json = json.dumps(items)
             cached.cached_at = datetime.utcnow()
         else:
             db.add(CachedInventory(steam_id=steam_id, items_json=json.dumps(items)))
 
-    # --- Prices: bulk-load today snapshots, fetch missing ones concurrently ---
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    # --- Prices: bulk-load today snapshots, fetch missing concurrently ---
+    today  = datetime.utcnow().strftime("%Y-%m-%d")
     cutoff = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
-    names = [item["market_hash_name"] for item in items]
+    names  = [item["market_hash_name"] for item in items]
 
     existing_snaps = {
         s.market_hash_name: s
@@ -82,60 +80,53 @@ async def fetch_inventory(
             st = prices["steam_price"]
             best = cf or st
             if best:
-                new_snap = PriceSnapshot(
-                    market_hash_name=name,
-                    price=best,
-                    steam_price=st,
-                    date=today,
-                )
-                db.add(new_snap)
-                existing_snaps[name] = new_snap
+                db.add(PriceSnapshot(market_hash_name=name, price=best, steam_price=st, date=today))
+                existing_snaps[name] = type("snap", (), {"price": best, "steam_price": st})()
 
-    # --- Ensure watched skins + compute trends + build response ---
+    # --- Bulk-load 7-day history in ONE query ---
+    all_history_rows = db.execute(
+        select(PriceSnapshot)
+        .where(PriceSnapshot.market_hash_name.in_(names))
+        .where(PriceSnapshot.date >= cutoff)
+        .order_by(PriceSnapshot.date)
+    ).scalars().all()
+
+    history_by_name: dict[str, list] = defaultdict(list)
+    for row in all_history_rows:
+        history_by_name[row.market_hash_name].append({"date": row.date, "price": row.price})
+
+    # --- Ensure watched skins + build response ---
+    watched_names = {
+        r.market_hash_name
+        for r in db.execute(
+            select(WatchedSkin).where(WatchedSkin.market_hash_name.in_(names))
+        ).scalars().all()
+    }
+    new_watched = [WatchedSkin(market_hash_name=n, source="inventory") for n in names if n not in watched_names]
+    if new_watched:
+        db.bulk_save_objects(new_watched)
+
     enriched = []
     for item in items:
         name = item["market_hash_name"]
-
-        watched = db.execute(
-            select(WatchedSkin).where(WatchedSkin.market_hash_name == name)
-        ).scalar_one_or_none()
-        if not watched:
-            db.add(WatchedSkin(market_hash_name=name, source="inventory"))
-
         snap = existing_snaps.get(name)
         best_price = snap.price if snap else None
-        # Derive CSFloat price: if snap.price equals steam_price, we stored the fallback
-        snap_steam = snap.steam_price if snap else None
-        if snap and snap_steam and snap.price == snap_steam:
-            csfloat_price = None   # Only Steam was available when we stored
-        else:
-            csfloat_price = best_price
-        steam_price = snap_steam
-
-        history = db.execute(
-            select(PriceSnapshot)
-            .where(PriceSnapshot.market_hash_name == name)
-            .where(PriceSnapshot.date >= cutoff)
-            .order_by(PriceSnapshot.date)
-        ).scalars().all()
-
-        trend = calculate_7day_trend([{"date": s.date, "price": s.price} for s in history])
-
+        snap_steam  = snap.steam_price if snap else None
+        csfloat_price = None if (snap and snap_steam and snap.price == snap_steam) else best_price
+        trend = calculate_7day_trend(history_by_name.get(name, []))
         enriched.append({
             **item,
-            "current_price": best_price,
-            "csfloat_price": csfloat_price,
-            "steam_price": steam_price,
-            "total_value": round((best_price or 0) * item["quantity"], 2),
-            "trend": trend,
+            "current_price":  best_price,
+            "csfloat_price":  csfloat_price,
+            "steam_price":    snap_steam,
+            "total_value":    round((best_price or 0) * item["quantity"], 2),
+            "trend":          trend,
         })
 
     db.commit()
-
-    total_value = sum(i["total_value"] for i in enriched)
     return {
-        "items": enriched,
-        "total_value": round(total_value, 2),
-        "count": len(enriched),
-        "from_cache": use_cache,
+        "items":       enriched,
+        "total_value": round(sum(i["total_value"] for i in enriched), 2),
+        "count":       len(enriched),
+        "from_cache":  use_cache,
     }

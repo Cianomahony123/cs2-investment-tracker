@@ -1,37 +1,62 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+﻿import { createContext, useContext, useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
-const SteamContext = createContext(null)
+const AuthContext = createContext(null)
+
+function decodeJwt(token) {
+  try {
+    const payload = token.split('.')[1]
+    return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')))
+  } catch {
+    return null
+  }
+}
 
 export function SteamProvider({ children }) {
-  const [steamId, setSteamId] = useState(() => localStorage.getItem('steam_id') ?? null)
+  const [steamId, setSteamId]       = useState(() => localStorage.getItem('steam_id') ?? null)
+  const [googleUser, setGoogleUser] = useState(() => {
+    const raw = localStorage.getItem('google_token')
+    return raw ? decodeJwt(raw) : null
+  })
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
 
   useEffect(() => {
-    const id = searchParams.get('steam_id')
-    if (id) {
-      localStorage.setItem('steam_id', id)
-      setSteamId(id)
-      // Clean the query param from the URL
+    const steamParam  = searchParams.get('steam_id')
+    const googleParam = searchParams.get('google_token')
+
+    if (steamParam) {
+      localStorage.setItem('steam_id', steamParam)
+      setSteamId(steamParam)
       searchParams.delete('steam_id')
       setSearchParams(searchParams, { replace: true })
       navigate('/inventory', { replace: true })
+    } else if (googleParam) {
+      const user = decodeJwt(googleParam)
+      if (user) {
+        localStorage.setItem('google_token', googleParam)
+        setGoogleUser(user)
+      }
+      searchParams.delete('google_token')
+      setSearchParams(searchParams, { replace: true })
+      navigate('/recommendations', { replace: true })
     }
   }, [])
 
   function logout() {
     localStorage.removeItem('steam_id')
+    localStorage.removeItem('google_token')
     setSteamId(null)
+    setGoogleUser(null)
   }
 
   return (
-    <SteamContext.Provider value={{ steamId, logout }}>
+    <AuthContext.Provider value={{ steamId, googleUser, logout }}>
       {children}
-    </SteamContext.Provider>
+    </AuthContext.Provider>
   )
 }
 
 export function useSteam() {
-  return useContext(SteamContext)
+  return useContext(AuthContext)
 }

@@ -146,3 +146,22 @@
   color: var(--text-dim);
   line-height: 1.6;
 }
+
+/* ML legend */
+.ml-intro {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  margin: 0 0 10px;
+}
+
+.ml-legend-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ml-legend-item {
+  font-size: 12px;
+  color: var(--text-dim);
+}

@@ -40,12 +40,8 @@ function MlRow({ item, rank }) {
       <div className={changeCls} style={{ fontWeight: 700, fontSize: 13 }}>
         {item.total_change_pct > 0 ? '+' : ''}{item.total_change_pct.toFixed(1)}%
       </div>
-      <div className="ml-score" title="Trend score = slope × R² + momentum boost">
-        {item.trend_score > 0 ? '+' : ''}{item.trend_score.toFixed(2)}
-      </div>
-      <div className="ml-conf" title="R² — how well the linear model fits the price history">
-        {(item.r_squared * 100).toFixed(0)}%
-      </div>
+      <div className="ml-score">{item.trend_score > 0 ? '+' : ''}{item.trend_score.toFixed(2)}</div>
+      <div className="ml-conf">{(item.r_squared * 100).toFixed(0)}%</div>
       <div className="ml-days">{item.data_points}d</div>
       <div><span className={cls}>{item.classification}</span></div>
     </div>
@@ -56,11 +52,13 @@ export default function Recommendations() {
   const [tab, setTab] = useState('weekly')
   const [loading, setLoading] = useState(false)
   const [seeding, setSeeding] = useState(false)
+  const [backfilling, setBackfilling] = useState(false)
   const [error, setError] = useState(null)
   const [data, setData] = useState(null)
   const [mlData, setMlData] = useState(null)
   const [mlLoading, setMlLoading] = useState(false)
   const [seedResult, setSeedResult] = useState(null)
+  const [backfillResult, setBackfillResult] = useState(null)
 
   useEffect(() => { loadWeekly() }, [])
 
@@ -69,51 +67,46 @@ export default function Recommendations() {
   }, [tab])
 
   async function loadWeekly() {
-    setLoading(true)
-    setError(null)
-    try {
-      const d = await api.getRecommendations(15)
-      setData(d)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+    setLoading(true); setError(null)
+    try { setData(await api.getRecommendations(15)) }
+    catch (err) { setError(err.message) }
+    finally { setLoading(false) }
   }
 
   async function loadMl() {
-    setMlLoading(true)
-    setError(null)
-    try {
-      const d = await api.getMlTrends(30)
-      setMlData(d)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setMlLoading(false)
-    }
+    setMlLoading(true); setError(null)
+    try { setMlData(await api.getMlTrends(30)) }
+    catch (err) { setError(err.message) }
+    finally { setMlLoading(false) }
   }
 
   async function seed() {
-    setSeeding(true)
-    setSeedResult(null)
+    setSeeding(true); setSeedResult(null)
     try {
       const r = await api.seedWatchlist()
       setSeedResult(r)
       await loadWeekly()
       setMlData(null)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSeeding(false)
-    }
+    } catch (err) { setError(err.message) }
+    finally { setSeeding(false) }
+  }
+
+  async function backfill() {
+    setBackfilling(true); setBackfillResult(null)
+    try {
+      const r = await api.backfillHistory()
+      setBackfillResult(r)
+      setMlData(null)
+      if (tab === 'ml') loadMl()
+    } catch (err) { setError(err.message) }
+    finally { setBackfilling(false) }
   }
 
   return (
     <div>
       <div className="page-header">
         <h1>Recommendations</h1>
-        <p>Price trend analysis powered by daily snapshots and linear regression.</p>
+        <p>AI-powered skin picks for the CS2 investment community.</p>
       </div>
 
       <div className="rec-controls">
@@ -123,7 +116,10 @@ export default function Recommendations() {
         <button className="btn-primary" onClick={seed} disabled={seeding}>
           {seeding ? 'Seeding…' : 'Seed Watchlist & Snapshot'}
         </button>
-        <span className="rec-hint">Seed adds popular skins and records today's prices. Run daily to build history.</span>
+        <button className="btn-secondary" onClick={backfill} disabled={backfilling}>
+          {backfilling ? 'Backfilling history…' : 'Backfill History'}
+        </button>
+        <span className="rec-hint">Seed adds popular skins + today's prices. Backfill mines sold-listing dates for instant multi-day history.</span>
       </div>
 
       {seedResult && (
@@ -131,16 +127,17 @@ export default function Recommendations() {
           Added <strong>{seedResult.added_to_watchlist}</strong> new skins ({seedResult.total_seeded} total tracked).
         </div>
       )}
+      {backfillResult && (
+        <div className="seed-result card">
+          Backfilled <strong>{backfillResult.filled}</strong> historical snapshots across {backfillResult.skins_processed} skins.
+        </div>
+      )}
 
       {error && <div className="error-msg">{error}</div>}
 
       <div className="rec-tabs">
-        <button className={`rec-tab${tab === 'weekly' ? ' active' : ''}`} onClick={() => setTab('weekly')}>
-          Weekly Picks
-        </button>
-        <button className={`rec-tab${tab === 'ml' ? ' active' : ''}`} onClick={() => setTab('ml')}>
-          ML Analysis
-        </button>
+        <button className={`rec-tab${tab === 'weekly' ? ' active' : ''}`} onClick={() => setTab('weekly')}>Weekly Picks</button>
+        <button className={`rec-tab${tab === 'ml' ? ' active' : ''}`} onClick={() => setTab('ml')}>ML Analysis</button>
       </div>
 
       {tab === 'weekly' && (
@@ -152,13 +149,11 @@ export default function Recommendations() {
                 <span>{data.recommendations.length} trending skins</span>
                 <span className="tag-flat">Updated {new Date(data.generated_at).toLocaleString()}</span>
               </div>
-
               {data.recommendations.length === 0 ? (
                 <div className="card empty-rec">
                   <div style={{ fontWeight: 600, marginBottom: 8 }}>No trend data yet</div>
                   <div style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.6 }}>
-                    Click <strong>Seed Watchlist &amp; Snapshot</strong> above, then come back tomorrow so there
-                    are at least 3 data points to calculate a trend.
+                    Click <strong>Seed Watchlist &amp; Snapshot</strong> then <strong>Backfill History</strong> to populate data immediately.
                   </div>
                 </div>
               ) : (
@@ -179,31 +174,39 @@ export default function Recommendations() {
 
       {tab === 'ml' && (
         <>
-          {mlLoading && <div className="loading">Running ML analysis…</div>}
+          {mlLoading && <div className="loading">Running analysis…</div>}
           {mlData && (
             <>
               <div className="rec-meta-bar">
                 <span>{mlData.total_analyzed} skins analyzed</span>
                 <span className="tag-flat">Generated {new Date(mlData.generated_at).toLocaleString()}</span>
               </div>
+
               <div className="ml-legend">
-                <span className="ml-legend-item"><strong>Trend Score</strong> = slope × R² + momentum — higher is a stronger, more confident uptrend</span>
-                <span className="ml-legend-item"><strong>Confidence (R²)</strong> — how consistently the price follows the trend line (100% = perfect)</span>
+                <p className="ml-intro">
+                  Our investment algorithm helps hobby players make smarter decisions in the CS2 skin economy.
+                  It analyses price history using linear regression to spot skins with genuine upward momentum —
+                  filtering out noise so you see only the cleanest trends.
+                </p>
+                <div className="ml-legend-items">
+                  <span className="ml-legend-item"><strong>Trend Score</strong> — overall signal strength: a high score means consistent upward movement, not just a one-day spike</span>
+                  <span className="ml-legend-item"><strong>Confidence</strong> — how reliably the skin follows its trend (higher = more predictable, lower = more volatile)</span>
+                </div>
               </div>
 
               {mlData.trends.length === 0 ? (
                 <div className="card empty-rec">
                   <div style={{ fontWeight: 600, marginBottom: 8 }}>No historical data yet</div>
                   <div style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.6 }}>
-                    Seed the watchlist and come back after collecting several days of price snapshots.
+                    Use <strong>Backfill History</strong> to pull real sold-listing dates from CSFloat and populate multi-day history immediately.
                   </div>
                 </div>
               ) : (
                 <div className="rec-table card">
                   <div className="ml-table-header">
                     <span>#</span><span>Skin</span><span>Price</span>
-                    <span>Change</span><span>Score</span><span>R²</span>
-                    <span>Days</span><span>Classification</span>
+                    <span>Change</span><span>Score</span><span>Confidence</span>
+                    <span>Days</span><span>Signal</span>
                   </div>
                   {mlData.trends.map((item, i) => (
                     <MlRow key={item.market_hash_name} item={item} rank={i + 1} />
@@ -216,8 +219,8 @@ export default function Recommendations() {
       )}
 
       <div className="rec-disclaimer">
-        Trend scores use linear regression (slope × R²) plus momentum over all available price history.
-        Past performance does not indicate future results.
+        Algorithm output is for informational purposes only. Past price trends do not guarantee future results.
+        Always do your own research before investing.
       </div>
     </div>
   )

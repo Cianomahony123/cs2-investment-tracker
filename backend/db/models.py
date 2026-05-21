@@ -9,10 +9,10 @@ class PriceSnapshot(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     market_hash_name = Column(String, index=True, nullable=False)
-    price = Column(Float, nullable=False)          # CSFloat price (or Steam fallback)
-    steam_price = Column(Float, nullable=True)      # Steam Market price
+    price = Column(Float, nullable=False)
+    steam_price = Column(Float, nullable=True)
     volume = Column(Integer, nullable=True)
-    date = Column(String, nullable=False)           # YYYY-MM-DD
+    date = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -21,7 +21,7 @@ class WatchedSkin(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     market_hash_name = Column(String, unique=True, nullable=False)
-    source = Column(String, default="inventory")   # 'inventory' or 'watchlist'
+    source = Column(String, default="inventory")
     added_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -32,3 +32,15 @@ class CachedInventory(Base):
     steam_id = Column(String, unique=True, nullable=False, index=True)
     items_json = Column(Text, nullable=False)
     cached_at = Column(DateTime, default=datetime.utcnow)
+
+
+class GoogleUser(Base):
+    __tablename__ = "google_users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    google_id = Column(String, unique=True, nullable=False, index=True)
+    email = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    picture = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_login = Column(DateTime, default=datetime.utcnow)
