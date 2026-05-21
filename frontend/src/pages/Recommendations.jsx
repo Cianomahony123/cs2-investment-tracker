@@ -26,6 +26,15 @@ function categorize(name) {
 
 const CATEGORY_ORDER = ['Rifles','Pistols','SMGs','Heavy','Knives','Gloves','Cases','Capsules','Stickers','Other']
 
+const PRICE_FILTER_EXEMPT = new Set(['Cases', 'Capsules', 'Stickers'])
+
+function applyPriceFilter(items) {
+  return items.filter(item => {
+    const price = item.current_price ?? 0
+    return price >= 1 || PRICE_FILTER_EXEMPT.has(categorize(item.market_hash_name))
+  })
+}
+
 function groupByCategory(items) {
   const groups = {}
   for (const item of items) {
@@ -203,7 +212,7 @@ export default function Recommendations() {
                   </div>
                 </div>
               ) : (
-                groupByCategory(data.recommendations).map(({ category, items }) => (
+                groupByCategory(applyPriceFilter(data.recommendations)).map(({ category, items }) => (
                   <div key={category} className="rec-category-section">
                     <div className="rec-category-header">{category}</div>
                     <div className="rec-table card">
@@ -253,7 +262,7 @@ export default function Recommendations() {
                   </div>
                 </div>
               ) : (
-                groupByCategory(mlData.trends).map(({ category, items }) => (
+                groupByCategory(applyPriceFilter(mlData.trends)).map(({ category, items }) => (
                   <div key={category} className="rec-category-section">
                     <div className="rec-category-header">{category}</div>
                     <div className="rec-table card">
@@ -281,3 +290,5 @@ export default function Recommendations() {
     </div>
   )
 }
+
+
