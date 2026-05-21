@@ -74,16 +74,20 @@ async def fetch_inventory(
         ).scalars().all()
     }
 
-    # Fetch dual prices for items missing today's snapshot
     missing = [n for n in names if n not in existing_snaps]
-    dual_prices: dict[str, dict] = {}
     if missing:
         fetched = await asyncio.gather(*[_fetch_dual_price(n) for n in missing])
         for name, prices in fetched:
-            dual_prices[name] = prices
-            best = prices["csfloat_price"] or prices["steam_price"]
+            cf = prices["csfloat_price"]
+            st = prices["steam_price"]
+            best = cf or st
             if best:
-                new_snap = PriceSnapshot(market_hash_name=name, price=best, date=today)
+                new_snap = PriceSnapshot(
+                    market_hash_name=name,
+                    price=best,
+                    steam_price=st,
+                    date=today,
+                )
                 db.add(new_snap)
                 existing_snaps[name] = new_snap
 
@@ -100,15 +104,13 @@ async def fetch_inventory(
 
         snap = existing_snaps.get(name)
         best_price = snap.price if snap else None
-
-        # Use live dual prices if we fetched them; otherwise derive from snapshot
-        if name in dual_prices:
-            csfloat_price = dual_prices[name]["csfloat_price"]
-            steam_price = dual_prices[name]["steam_price"]
+        # Derive CSFloat price: if snap.price equals steam_price, we stored the fallback
+        snap_steam = snap.steam_price if snap else None
+        if snap and snap_steam and snap.price == snap_steam:
+            csfloat_price = None   # Only Steam was available when we stored
         else:
-            # Cached day — we only have the stored best price; show it for both as fallback
             csfloat_price = best_price
-            steam_price = None
+        steam_price = snap_steam
 
         history = db.execute(
             select(PriceSnapshot)
