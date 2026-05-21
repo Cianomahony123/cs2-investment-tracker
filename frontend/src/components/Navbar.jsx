@@ -27,6 +27,7 @@ function GoogleIcon() {
 export default function Navbar() {
   const { steamId, steamProfile, googleUser, logout } = useSteam()
   const [googleEnabled, setGoogleEnabled] = useState(false)
+  const [confirmingLogout, setConfirmingLogout] = useState(false)
 
   useEffect(() => {
     fetch(`${API}/auth/config`)
@@ -65,7 +66,15 @@ export default function Navbar() {
               <img src={avatar} alt="" className="auth-avatar" referrerPolicy="no-referrer" />
             )}
             <span className="auth-id">{displayName}</span>
-            <button className="btn-logout" onClick={logout}>Logout</button>
+            {confirmingLogout ? (
+              <div className="logout-confirm">
+                <span className="logout-confirm-text">Sign out?</span>
+                <button className="btn-logout-yes" onClick={logout}>Yes</button>
+                <button className="btn-logout-cancel" onClick={() => setConfirmingLogout(false)}>Cancel</button>
+              </div>
+            ) : (
+              <button className="btn-logout" onClick={() => setConfirmingLogout(true)}>Logout</button>
+            )}
           </div>
         ) : (
           <div className="auth-buttons">

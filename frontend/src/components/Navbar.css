@@ -116,3 +116,31 @@
 }
 
 .btn-logout:hover { color: var(--red); border-color: var(--red); }
+
+/* Logout confirmation */
+.logout-confirm { display: flex; align-items: center; gap: 6px; }
+.logout-confirm-text { font-size: 12px; color: var(--text-dim); }
+
+.btn-logout-yes {
+  background: var(--red, #e53e3e);
+  color: #fff;
+  border: none;
+  padding: 5px 11px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-logout-yes:hover { opacity: 0.85; }
+
+.btn-logout-cancel {
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 5px 11px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.btn-logout-cancel:hover { color: var(--text); }
