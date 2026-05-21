@@ -24,8 +24,8 @@ function StatCard({ label, value, sub, accent }) {
 }
 
 function TrendRow({ item }) {
-  const pct = item.total_change_pct
-  const cls = pct > 0 ? 'tag-up' : pct < 0 ? 'tag-down' : 'tag-flat'
+  const pct  = item.trend?.total_change_pct ?? 0
+  const cls  = pct > 0 ? 'tag-up' : pct < 0 ? 'tag-down' : 'tag-flat'
   const sign = pct > 0 ? '+' : ''
   return (
     <div className="trend-row">
@@ -43,7 +43,8 @@ export default function Dashboard() {
   const [data, setData] = useState(null)
 
   useEffect(() => {
-    if (steamId && !data) load(steamId)
+    if (!steamId) { setData(null); return }
+    if (!data) load(steamId)
   }, [steamId])
 
   async function load(id) {
@@ -60,12 +61,12 @@ export default function Dashboard() {
 
   const gainers = data?.items
     .filter(i => i.trend?.data_points >= 2)
-    .sort((a, b) => b.trend.total_change_pct - a.trend.total_change_pct)
+    .sort((a, b) => (b.trend?.total_change_pct ?? 0) - (a.trend?.total_change_pct ?? 0))
     .slice(0, 5) ?? []
 
   const losers = data?.items
     .filter(i => i.trend?.data_points >= 2)
-    .sort((a, b) => a.trend.total_change_pct - b.trend.total_change_pct)
+    .sort((a, b) => (a.trend?.total_change_pct ?? 0) - (b.trend?.total_change_pct ?? 0))
     .slice(0, 5) ?? []
 
   return (

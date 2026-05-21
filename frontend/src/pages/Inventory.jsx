@@ -25,7 +25,8 @@ export default function Inventory() {
   const [sortBy, setSortBy] = useState('default')
 
   useEffect(() => {
-    if (steamId && !inventory) loadInventory(steamId)
+    if (!steamId) { setInventory(null); setSelected(null); return }
+    if (!inventory) loadInventory(steamId)
   }, [steamId])
 
   async function loadInventory(id, forceRefresh = false) {
@@ -197,4 +198,5 @@ export default function Inventory() {
     </div>
   )
 }
+
 
