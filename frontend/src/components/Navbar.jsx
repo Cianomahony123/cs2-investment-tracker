@@ -5,7 +5,6 @@ import './Navbar.css'
 
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api'
 
-// Steam wordmark SVG (official proportions)
 function SteamIcon() {
   return (
     <svg viewBox="0 0 24 24" className="steam-svg" xmlns="http://www.w3.org/2000/svg">
@@ -14,7 +13,6 @@ function SteamIcon() {
   )
 }
 
-// Google "G" SVG
 function GoogleIcon() {
   return (
     <svg viewBox="0 0 24 24" className="google-svg" xmlns="http://www.w3.org/2000/svg">
@@ -27,7 +25,7 @@ function GoogleIcon() {
 }
 
 export default function Navbar() {
-  const { steamId, googleUser, logout } = useSteam()
+  const { steamId, steamProfile, googleUser, logout } = useSteam()
   const [googleEnabled, setGoogleEnabled] = useState(false)
 
   useEffect(() => {
@@ -38,9 +36,14 @@ export default function Navbar() {
   }, [])
 
   const isLoggedIn = steamId || googleUser
+
   const displayName = steamId
-    ? `…${steamId.slice(-6)}`
+    ? (steamProfile?.name || `…${steamId.slice(-6)}`)
     : googleUser?.name?.split(' ')[0] ?? ''
+
+  const avatar = steamId
+    ? (steamProfile?.avatar || null)
+    : (googleUser?.picture || null)
 
   return (
     <nav className="navbar">
@@ -58,8 +61,8 @@ export default function Navbar() {
       <div className="navbar-auth">
         {isLoggedIn ? (
           <div className="auth-logged-in">
-            {googleUser?.picture && (
-              <img src={googleUser.picture} alt="" className="auth-avatar" referrerPolicy="no-referrer" />
+            {avatar && (
+              <img src={avatar} alt="" className="auth-avatar" referrerPolicy="no-referrer" />
             )}
             <span className="auth-id">{displayName}</span>
             <button className="btn-logout" onClick={logout}>Logout</button>

@@ -184,3 +184,26 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
     # Issue a signed JWT for the frontend
     token = _issue_token({"sub": google_id, "email": email, "name": name, "picture": picture})
     return RedirectResponse(f"{FRONTEND_URL}/?google_token={token}")
+
+
+# ── Steam profile ─────────────────────────────────────────────────────────────
+
+@router.get("/steam/profile/{steam_id}")
+async def steam_profile(steam_id: str):
+    if not STEAM_ID_VALID.match(steam_id):
+        raise HTTPException(status_code=400, detail="Invalid Steam ID")
+    url = f"https://steamcommunity.com/profiles/{steam_id}/?xml=1"
+    _hdr = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0, headers=_hdr) as client:
+            resp = await client.get(url)
+        import xml.etree.ElementTree as ET
+        root   = ET.fromstring(resp.text)
+        name   = root.findtext("steamID")   or f"…{steam_id[-6:]}"
+        avatar = root.findtext("avatarFull") or root.findtext("avatarMedium") or ""
+    except Exception:
+        name   = f"…{steam_id[-6:]}"
+        avatar = ""
+    return {"steam_id": steam_id, "name": name, "avatar": avatar}

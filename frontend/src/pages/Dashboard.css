@@ -1,4 +1,4 @@
-.steam-form-dash {
+﻿.steam-form-dash {
   display: flex;
   gap: 10px;
   margin-bottom: 24px;
@@ -105,3 +105,28 @@
 @media (max-width: 640px) {
   .movers-grid { grid-template-columns: 1fr; }
 }
+
+.dash-signin {
+  max-width: 420px;
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dash-steam-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: #1b2838;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 12px 22px;
+  border-radius: 8px;
+  text-decoration: none;
+  width: fit-content;
+  margin-top: 4px;
+  transition: opacity 0.15s;
+}
+.dash-steam-btn:hover { opacity: 0.85; }
