@@ -64,9 +64,7 @@ export function SteamProvider({ children }) {
     localStorage.removeItem('steam_name')
     localStorage.removeItem('steam_avatar')
     localStorage.removeItem('google_token')
-    setSteamId(null)
-    setSteamProfile(null)
-    setGoogleUser(null)
+    window.location.replace('/')
   }
 
   return (
@@ -79,3 +77,4 @@ export function SteamProvider({ children }) {
 export function useSteam() {
   return useContext(AuthContext)
 }
+
