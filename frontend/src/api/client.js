@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL ?? '/api'
+﻿const BASE = import.meta.env.VITE_API_URL ?? '/api'
 
 async function request(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, options)
@@ -21,6 +21,9 @@ export const api = {
 
   getRecommendations: (limit = 10) =>
     request(`/recommendations/?limit=${limit}`),
+
+  getMlTrends: (limit = 30) =>
+    request(`/recommendations/ml-trends?limit=${limit}`),
 
   seedWatchlist: () =>
     request('/recommendations/seed-watchlist', { method: 'POST' }),

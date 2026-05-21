@@ -1,9 +1,17 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect, useMemo } from 'react'
 import { api } from '../api/client'
 import { useSteam } from '../context/SteamContext'
 import SkinCard from '../components/SkinCard'
 import PriceChart from '../components/PriceChart'
 import './Inventory.css'
+
+const SORT_OPTIONS = [
+  { value: 'default',    label: 'Default' },
+  { value: 'price-desc', label: 'Price: High → Low' },
+  { value: 'price-asc',  label: 'Price: Low → High' },
+  { value: 'trend-up',   label: 'Trending Up' },
+  { value: 'trend-down', label: 'Trending Down' },
+]
 
 export default function Inventory() {
   const { steamId } = useSteam()
@@ -14,12 +22,10 @@ export default function Inventory() {
   const [selected, setSelected] = useState(null)
   const [history, setHistory] = useState(null)
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [sortBy, setSortBy] = useState('default')
 
-  // Auto-load when logged in via Steam
   useEffect(() => {
-    if (steamId && !inventory) {
-      loadInventory(steamId)
-    }
+    if (steamId && !inventory) loadInventory(steamId)
   }, [steamId])
 
   async function loadInventory(id, forceRefresh = false) {
@@ -57,13 +63,25 @@ export default function Inventory() {
     }
   }
 
+  const sortedItems = useMemo(() => {
+    if (!inventory) return []
+    const items = [...inventory.items]
+    switch (sortBy) {
+      case 'price-desc': return items.sort((a, b) => (b.current_price ?? 0) - (a.current_price ?? 0))
+      case 'price-asc':  return items.sort((a, b) => (a.current_price ?? 0) - (b.current_price ?? 0))
+      case 'trend-up':   return items.sort((a, b) => (b.trend?.total_change_pct ?? -Infinity) - (a.trend?.total_change_pct ?? -Infinity))
+      case 'trend-down': return items.sort((a, b) => (a.trend?.total_change_pct ?? Infinity) - (b.trend?.total_change_pct ?? Infinity))
+      default: return items
+    }
+  }, [inventory, sortBy])
+
   return (
     <div>
       <div className="page-header">
         <h1>Inventory</h1>
         <p>
           {steamId
-            ? 'Showing your CS2 inventory with live CSFloat prices.'
+            ? 'Your CS2 inventory with live CSFloat and Steam Market prices.'
             : 'Log in with Steam or enter a Steam ID64 to load an inventory.'}
         </p>
       </div>
@@ -105,17 +123,43 @@ export default function Inventory() {
             </div>
           </div>
 
+          <div className="sort-bar">
+            <span className="sort-label">Sort by</span>
+            {SORT_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                className={`sort-btn${sortBy === opt.value ? ' active' : ''}`}
+                onClick={() => setSortBy(opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
           {selected && (
             <div className="skin-detail card">
               <div className="detail-header">
                 <img src={selected.icon_url} alt={selected.name} className="detail-img" />
                 <div>
                   <div className="detail-name">{selected.name}</div>
-                  <div className="detail-price">
-                    {selected.current_price != null ? `$${selected.current_price.toFixed(2)}` : 'Price unavailable'}
+                  <div className="detail-prices">
+                    {selected.csfloat_price != null && (
+                      <div className="detail-price-row">
+                        <span className="source-dot source-cf" />
+                        <span className="source-label">CSFloat</span>
+                        <span className="detail-price-val">${selected.csfloat_price.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {selected.steam_price != null && (
+                      <div className="detail-price-row">
+                        <span className="source-dot source-steam" />
+                        <span className="source-label">Steam</span>
+                        <span className="detail-price-val steam">${selected.steam_price.toFixed(2)}</span>
+                      </div>
+                    )}
                   </div>
                   {selected.trend?.data_points >= 2 && (
-                    <div className={selected.trend.total_change_pct >= 0 ? 'tag-up' : 'tag-down'} style={{ fontSize: 13, marginTop: 4 }}>
+                    <div className={selected.trend.total_change_pct >= 0 ? 'tag-up' : 'tag-down'} style={{ fontSize: 13, marginTop: 6 }}>
                       {selected.trend.total_change_pct >= 0 ? '+' : ''}{selected.trend.total_change_pct.toFixed(1)}% over 7 days
                     </div>
                   )}
@@ -132,7 +176,7 @@ export default function Inventory() {
           )}
 
           <div className="skin-grid">
-            {inventory.items.map(item => (
+            {sortedItems.map(item => (
               <SkinCard
                 key={item.market_hash_name}
                 item={item}

@@ -6,7 +6,7 @@ from sqlalchemy import select
 from datetime import datetime, timedelta
 
 from services.steam_api import get_inventory
-from services.csfloat_api import get_item_price
+from services.csfloat_api import get_item_prices_dual
 from services.trend_analyzer import calculate_7day_trend
 from db.database import get_db
 from db.models import PriceSnapshot, WatchedSkin, CachedInventory
@@ -17,11 +17,11 @@ CACHE_TTL_HOURS = 1
 _PRICE_SEMAPHORE = asyncio.Semaphore(5)
 
 
-async def _fetch_price(name: str) -> tuple[str, float | None]:
+async def _fetch_dual_price(name: str) -> tuple[str, dict]:
     async with _PRICE_SEMAPHORE:
         await asyncio.sleep(0.2)
-        price = await get_item_price(name)
-        return name, price
+        prices = await get_item_prices_dual(name)
+        return name, prices
 
 
 @router.get("/{steam_id}")
@@ -74,16 +74,20 @@ async def fetch_inventory(
         ).scalars().all()
     }
 
+    # Fetch dual prices for items missing today's snapshot
     missing = [n for n in names if n not in existing_snaps]
+    dual_prices: dict[str, dict] = {}
     if missing:
-        fetched = await asyncio.gather(*[_fetch_price(n) for n in missing])
-        for name, price in fetched:
-            if price:
-                new_snap = PriceSnapshot(market_hash_name=name, price=price, date=today)
+        fetched = await asyncio.gather(*[_fetch_dual_price(n) for n in missing])
+        for name, prices in fetched:
+            dual_prices[name] = prices
+            best = prices["csfloat_price"] or prices["steam_price"]
+            if best:
+                new_snap = PriceSnapshot(market_hash_name=name, price=best, date=today)
                 db.add(new_snap)
                 existing_snaps[name] = new_snap
 
-    # --- Ensure watched skins + compute trends ---
+    # --- Ensure watched skins + compute trends + build response ---
     enriched = []
     for item in items:
         name = item["market_hash_name"]
@@ -95,7 +99,16 @@ async def fetch_inventory(
             db.add(WatchedSkin(market_hash_name=name, source="inventory"))
 
         snap = existing_snaps.get(name)
-        price = snap.price if snap else None
+        best_price = snap.price if snap else None
+
+        # Use live dual prices if we fetched them; otherwise derive from snapshot
+        if name in dual_prices:
+            csfloat_price = dual_prices[name]["csfloat_price"]
+            steam_price = dual_prices[name]["steam_price"]
+        else:
+            # Cached day — we only have the stored best price; show it for both as fallback
+            csfloat_price = best_price
+            steam_price = None
 
         history = db.execute(
             select(PriceSnapshot)
@@ -108,8 +121,10 @@ async def fetch_inventory(
 
         enriched.append({
             **item,
-            "current_price": price,
-            "total_value": round((price or 0) * item["quantity"], 2),
+            "current_price": best_price,
+            "csfloat_price": csfloat_price,
+            "steam_price": steam_price,
+            "total_value": round((best_price or 0) * item["quantity"], 2),
             "trend": trend,
         })
 

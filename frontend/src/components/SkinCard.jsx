@@ -1,4 +1,4 @@
-import './SkinCard.css'
+﻿import './SkinCard.css'
 
 function TrendBadge({ trend }) {
   if (!trend || trend.data_points < 2) return <span className="trend-badge flat">No data</span>
@@ -9,7 +9,7 @@ function TrendBadge({ trend }) {
 }
 
 export default function SkinCard({ item, onClick }) {
-  const { name, icon_url, exterior, rarity, current_price, total_value, quantity, trend } = item
+  const { name, icon_url, exterior, rarity, csfloat_price, steam_price, current_price, total_value, quantity, trend } = item
 
   return (
     <div className="skin-card" onClick={onClick} role={onClick ? 'button' : undefined}>
@@ -23,12 +23,28 @@ export default function SkinCard({ item, onClick }) {
           {rarity && <span className="meta-tag rarity">{rarity}</span>}
         </div>
         <div className="skin-pricing">
-          <div className="price-row">
-            <span className="price-label">Price</span>
-            <span className="price-value">
-              {current_price != null ? `$${current_price.toFixed(2)}` : '—'}
-            </span>
-          </div>
+          {csfloat_price != null ? (
+            <div className="price-row">
+              <span className="price-label">
+                <span className="source-dot source-cf" />CSFloat
+              </span>
+              <span className="price-value">${csfloat_price.toFixed(2)}</span>
+            </div>
+          ) : null}
+          {steam_price != null ? (
+            <div className="price-row">
+              <span className="price-label">
+                <span className="source-dot source-steam" />Steam
+              </span>
+              <span className="price-value steam-val">${steam_price.toFixed(2)}</span>
+            </div>
+          ) : null}
+          {csfloat_price == null && steam_price == null && (
+            <div className="price-row">
+              <span className="price-label">Price</span>
+              <span className="price-value">—</span>
+            </div>
+          )}
           {quantity > 1 && (
             <div className="price-row">
               <span className="price-label">Total ({quantity}x)</span>
