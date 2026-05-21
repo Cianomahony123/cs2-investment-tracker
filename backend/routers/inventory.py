@@ -1,3 +1,4 @@
+import asyncio
 import json
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
@@ -80,6 +81,7 @@ async def fetch_inventory(
         if snap:
             price = snap.price
         else:
+            await asyncio.sleep(0.5)
             price = await get_item_price(name)
             if price:
                 new_snap = PriceSnapshot(market_hash_name=name, price=price, date=today)
