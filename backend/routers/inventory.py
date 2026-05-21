@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import json
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
@@ -13,7 +13,15 @@ from db.models import PriceSnapshot, WatchedSkin, CachedInventory
 
 router = APIRouter()
 
-CACHE_TTL_HOURS = 1  # Re-fetch Steam inventory at most once per hour
+CACHE_TTL_HOURS = 1
+_PRICE_SEMAPHORE = asyncio.Semaphore(5)
+
+
+async def _fetch_price(name: str) -> tuple[str, float | None]:
+    async with _PRICE_SEMAPHORE:
+        await asyncio.sleep(0.2)
+        price = await get_item_price(name)
+        return name, price
 
 
 @router.get("/{steam_id}")
@@ -46,14 +54,13 @@ async def fetch_inventory(
                 detail="Could not reach Steam. Make sure your Steam ID is correct and your inventory is set to Public.",
             )
 
-        # Persist / update cache
         if cached:
             cached.items_json = json.dumps(items)
             cached.cached_at = datetime.utcnow()
         else:
             db.add(CachedInventory(steam_id=steam_id, items_json=json.dumps(items)))
 
-    # --- Prices (use today's snapshot, only call CSFloat for misses) ---
+    # --- Prices: bulk-load today snapshots, fetch missing ones concurrently ---
     today = datetime.utcnow().strftime("%Y-%m-%d")
     cutoff = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
     names = [item["market_hash_name"] for item in items]
@@ -67,6 +74,16 @@ async def fetch_inventory(
         ).scalars().all()
     }
 
+    missing = [n for n in names if n not in existing_snaps]
+    if missing:
+        fetched = await asyncio.gather(*[_fetch_price(n) for n in missing])
+        for name, price in fetched:
+            if price:
+                new_snap = PriceSnapshot(market_hash_name=name, price=price, date=today)
+                db.add(new_snap)
+                existing_snaps[name] = new_snap
+
+    # --- Ensure watched skins + compute trends ---
     enriched = []
     for item in items:
         name = item["market_hash_name"]
@@ -78,15 +95,7 @@ async def fetch_inventory(
             db.add(WatchedSkin(market_hash_name=name, source="inventory"))
 
         snap = existing_snaps.get(name)
-        if snap:
-            price = snap.price
-        else:
-            await asyncio.sleep(0.5)
-            price = await get_item_price(name)
-            if price:
-                new_snap = PriceSnapshot(market_hash_name=name, price=price, date=today)
-                db.add(new_snap)
-                existing_snaps[name] = new_snap
+        price = snap.price if snap else None
 
         history = db.execute(
             select(PriceSnapshot)

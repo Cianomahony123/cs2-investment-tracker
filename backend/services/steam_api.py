@@ -1,8 +1,15 @@
-import httpx
+﻿import httpx
 from typing import Optional
 
 STEAM_INVENTORY_URL = "https://steamcommunity.com/inventory/{steam_id}/730/2"
 PAGE_SIZE = 75  # Steam's maximum per-page limit
+
+_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://steamcommunity.com/",
+}
 
 
 async def get_inventory(steam_id: str) -> list[dict]:
@@ -11,7 +18,7 @@ async def get_inventory(steam_id: str) -> list[dict]:
     all_descriptions: dict[tuple, dict] = {}
     start_assetid: Optional[str] = None
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=30.0, headers=_HEADERS, follow_redirects=True) as client:
         while True:
             params: dict = {"l": "english", "count": PAGE_SIZE}
             if start_assetid:
