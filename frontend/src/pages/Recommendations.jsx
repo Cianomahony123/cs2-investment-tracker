@@ -3,7 +3,7 @@ import { api } from '../api/client'
 import './Recommendations.css'
 
 function cfloatUrl(name) {
-  return `https://csfloat.com/buy?market_hash_name=${encodeURIComponent(name)}&sort_by=lowest_price`
+  return `https://csfloat.com/search?market_hash_name=${encodeURIComponent(name)}&sort_by=lowest_price`
 }
 
 function RecommendationRow({ item, rank }) {
@@ -235,4 +235,5 @@ export default function Recommendations() {
     </div>
   )
 }
+
 
