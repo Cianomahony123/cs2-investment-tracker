@@ -38,7 +38,7 @@ router = APIRouter()
 def _make_state() -> str:
     nonce = secrets.token_urlsafe(16)
     ts = str(int(time.time()))
-    sig = hmac.new(SECRET_KEY.encode(), f"{nonce}:{ts}".encode(), hashlib.sha256).hexdigest()[:16]
+    sig = hmac.new(SECRET_KEY.encode(), f"{nonce}:{ts}".encode(), hashlib.sha256).hexdigest()[:32]
     return f"{nonce}:{ts}:{sig}"
 
 
@@ -53,7 +53,7 @@ def _verify_state(state: str) -> bool:
         return False
     if age > 300:  # 5-minute window
         return False
-    expected = hmac.new(SECRET_KEY.encode(), f"{nonce}:{ts_str}".encode(), hashlib.sha256).hexdigest()[:16]
+    expected = hmac.new(SECRET_KEY.encode(), f"{nonce}:{ts_str}".encode(), hashlib.sha256).hexdigest()[:32]
     return hmac.compare_digest(sig, expected)
 
 
@@ -155,11 +155,17 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
     if not id_token_str:
         raise HTTPException(status_code=401, detail="No ID token in Google response.")
 
-    # Decode without verification (Google already verified via HTTPS)
+    # Decode without verifying signature (token was fetched server-to-server from Google)
+    # but verify expiry and audience to catch stale/replayed tokens
     try:
         claims = jwt.decode(id_token_str, options={"verify_signature": False})
     except Exception:
         raise HTTPException(status_code=401, detail="Failed to decode Google ID token.")
+    import time as _time
+    if claims.get("exp", 0) < int(_time.time()):
+        raise HTTPException(status_code=401, detail="Google token has expired.")
+    if GOOGLE_CLIENT_ID and claims.get("aud") != GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=401, detail="Google token audience mismatch.")
 
     google_id = claims.get("sub")
     email     = claims.get("email", "")
@@ -207,3 +213,4 @@ async def steam_profile(steam_id: str):
         name   = f"…{steam_id[-6:]}"
         avatar = ""
     return {"steam_id": steam_id, "name": name, "avatar": avatar}
+
